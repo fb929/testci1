@@ -33,49 +33,6 @@ jobs:
           go-version: "1.24"
           cache: false
 
-      - name: Set build variables
-        id: build-vars
-        run: |
-          echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          echo "time=$(date -u '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
-          echo "commit=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
-
-      - name: Compress binaries
-        run: |
-          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-darwin-amd64.tar.gz"
-          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-darwin-arm64.tar.gz"
-          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-windows-amd64.zip"
-          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-linux-amd64.tar.gz"
-          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-linux-arm64.tar.gz"
-          ls -la anytype-cli-*
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: anytype-cli-releases
-          path: |
-            anytype-cli-*.tar.gz
-            anytype-cli-*.zip
-
-  create-release:
-    needs: build-all-platforms
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout tags
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: anytype-cli-releases
-          path: artifacts
-
-      - name: List artifacts
-        run: ls -la artifacts/
-
       - name: Resolve release tag
         id: resolve-tag
         shell: bash
@@ -112,18 +69,58 @@ jobs:
           fi
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$([[ "$TAG" == *-rc ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-
           echo "Resolved tag: $TAG"
+
+      - name: Set build variables
+        id: build-vars
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "version=${{ steps.resolve-tag.outputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+          echo "time=$(date -u '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
+          echo "commit=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Compress binaries
+        run: |
+          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-darwin-amd64.tar.gz"
+          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-darwin-arm64.tar.gz"
+          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-windows-amd64.zip"
+          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-linux-amd64.tar.gz"
+          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-linux-arm64.tar.gz"
+          ls -la anytype-cli-*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: anytype-cli-releases
+          path: |
+            anytype-cli-*.tar.gz
+            anytype-cli-*.zip
+
+  create-release:
+    needs: build-all-platforms
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: anytype-cli-releases
+          path: artifacts
+
+      - name: List artifacts
+        run: ls -la artifacts/
 
       - name: Create Release & Upload Assets
         id: create-release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.resolve-tag.outputs.tag }}
-          name: ${{ steps.resolve-tag.outputs.tag }}
+          tag_name: ${{ needs.build-all-platforms.outputs.version }}
+          name: ${{ needs.build-all-platforms.outputs.version }}
           files: artifacts/anytype-cli-*
           generate_release_notes: true
           draft: false
-          prerelease: ${{ steps.resolve-tag.outputs.prerelease == 'true' }}
+          prerelease: ${{ contains(needs.build-all-platforms.outputs.version, '-rc') }}
           token: ${{ secrets.GITHUB_TOKEN }}
