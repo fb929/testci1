@@ -42,11 +42,11 @@ jobs:
 
       - name: Compress binaries
         run: |
-          touch "anytype-cli-${{ steps.build-vars.outputs.version }}-darwin-amd64.tar.gz"
-          touch "anytype-cli-${{ steps.build-vars.outputs.version }}-darwin-arm64.tar.gz"
-          touch "anytype-cli-${{ steps.build-vars.outputs.version }}-windows-amd64.zip"
-          touch "anytype-cli-${{ steps.build-vars.outputs.version }}-linux-amd64.tar.gz"
-          touch "anytype-cli-${{ steps.build-vars.outputs.version }}-linux-arm64.tar.gz"
+          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-darwin-amd64.tar.gz"
+          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-darwin-arm64.tar.gz"
+          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-windows-amd64.zip"
+          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-linux-amd64.tar.gz"
+          echo 1 > "anytype-cli-${{ steps.build-vars.outputs.version }}-linux-arm64.tar.gz"
           ls -la anytype-cli-*
 
       - name: Upload artifacts
