@@ -62,6 +62,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout tags
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
@@ -71,13 +76,54 @@ jobs:
       - name: List artifacts
         run: ls -la artifacts/
 
+      - name: Resolve release tag
+        id: resolve-tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" != "repository_dispatch" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            SOURCE_TAG="${{ github.event.client_payload.tag }}"
+
+            if [[ "$SOURCE_TAG" == *-rc* ]]; then
+              FILTER='^v[0-9]+\.[0-9]+\.[0-9]+-rc$'
+              SUFFIX='-rc'
+            else
+              FILTER='^v[0-9]+\.[0-9]+\.[0-9]+$'
+              SUFFIX=''
+            fi
+
+            LAST_TAG="$(git tag --list | grep -E "$FILTER" | sort -V | tail -n 1 || true)"
+
+            if [ -z "$LAST_TAG" ]; then
+              MAJOR=0
+              MINOR=0
+              PATCH=0
+            else
+              BASE="${LAST_TAG#v}"
+              BASE="${BASE%-rc}"
+              IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
+            fi
+
+            PATCH=$((PATCH + 1))
+            TAG="v${MAJOR}.${MINOR}.${PATCH}${SUFFIX}"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$([[ "$TAG" == *-rc ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+          echo "Resolved tag: $TAG"
+
       - name: Create Release & Upload Assets
         id: create-release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ steps.resolve-tag.outputs.tag }}
+          name: ${{ steps.resolve-tag.outputs.tag }}
           files: artifacts/anytype-cli-*
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(github.ref, '-rc') }}
+          prerelease: ${{ steps.resolve-tag.outputs.prerelease == 'true' }}
           token: ${{ secrets.GITHUB_TOKEN }}
