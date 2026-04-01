@@ -1,0 +1,83 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  repository_dispatch:
+    types: [trigger-from-heart]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-all-platforms:
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.build-vars.outputs.version }}
+      commit: ${{ steps.build-vars.outputs.commit }}
+      build-time: ${{ steps.build-vars.outputs.time }}
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+          cache: false
+
+      - name: Set build variables
+        id: build-vars
+        run: |
+          echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "time=$(date -u '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
+          echo "commit=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Compress binaries
+        run: |
+          touch "anytype-cli-${{ steps.build-vars.outputs.version }}-darwin-amd64.tar.gz"
+          touch "anytype-cli-${{ steps.build-vars.outputs.version }}-darwin-arm64.tar.gz"
+          touch "anytype-cli-${{ steps.build-vars.outputs.version }}-windows-amd64.zip"
+          touch "anytype-cli-${{ steps.build-vars.outputs.version }}-linux-amd64.tar.gz"
+          touch "anytype-cli-${{ steps.build-vars.outputs.version }}-linux-arm64.tar.gz"
+          ls -la anytype-cli-*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: anytype-cli-releases
+          path: |
+            anytype-cli-*.tar.gz
+            anytype-cli-*.zip
+
+  create-release:
+    needs: build-all-platforms
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: anytype-cli-releases
+          path: artifacts
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Create Release & Upload Assets
+        id: create-release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          files: artifacts/anytype-cli-*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') }}
+          token: ${{ secrets.GITHUB_TOKEN }}
